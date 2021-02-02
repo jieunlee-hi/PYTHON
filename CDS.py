@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 
 #TRADING ECONOMICS 나라별 최신 신용등급 크롤링
+#chrome webdriver , selenium 사용
 
 def cds():
     all_data_frame = []
