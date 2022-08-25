@@ -1,0 +1,165 @@
+# -*- coding:utf-8 -*-
+import re
+from datetime import datetime, timedelta
+import time
+import traceback
+import pandas as pd
+import sys, os, traceback
+from selenium.webdriver.common.keys import Keys
+import os
+from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+import sys, os, traceback, glob
+import win32com.client as win32
+import sys
+import os.path
+import pandas as pd
+import urllib.request
+import urllib.parse
+from bs4 import BeautifulSoup
+from urllib.request import urlopen
+import openpyxl
+import xlrd
+from datetime import datetime,timedelta
+import time
+import traceback
+import requests
+from selenium import webdriver
+options = webdriver.ChromeOptions()
+options.add_experimental_option("excludeSwitches", ["enable-logging"])
+options.add_argument('--no-sandbox')
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument("user-agent=Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko")
+headers ={
+        'referer':'https://www.naver.com/',
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.103 Safari/537.36"
+
+    }
+driver = webdriver.Chrome('C:\\NAVER_FINANCE\chromedriver_win32\chromedriver.exe',options=options)
+
+# 암묵적으로 웹 자원 로드를 위해 최대 60초까지 기다려 준다.
+driver.implicitly_wait(60)
+# NAVER_FINANCE 사이트 주소
+driver.get(
+        'https://finance.naver.com/sise/sise_group.nhn?type=upjong')
+html = driver.page_source
+soup = BeautifulSoup(html, 'html.parser')
+
+all_data_frame=[]
+for td in soup('td'):  # td 안의
+    for a in td('a'):  # a 태그 중에서
+        name=a.get_text()  #업종명 데이터 추출
+        print(name)
+        
+        p = re.search('/sise/.*', a['href']).group(0)  # 필요부분추출후 그룹핑
+        #업종 url
+        url2='https://finance.naver.com'+p
+        print(url2)
+        req=requests.get(url2,headers=headers)
+        html2=req.text
+        url2=BeautifulSoup(html2,'html.parser')
+        #url2 = BeautifulSoup(req, 'html5lib')
+
+        time.sleep(2)
+        #소속종목수 데이터 추출
+        search = url2.find_all('td', attrs={'class': 'number'})
+        search=search[1].get_text().strip()
+        print(search)
+        #search = driver.find_element_by_xpath('//*[@id="contentarea_left"]/table[1]/tbody/tr[4]/td[3]')
+
+        #업종별 종목리스트 데이터
+        upjong=url2.find_all('div', attrs={'class': 'name_area'})
+
+        #소속된    종목수
+        count = int(search)
+        time.sleep(1)
+        for i in range(0, count):
+            # 종목명
+            start=upjong[i]
+            start = start.text
+            start=start.replace(" *", "")
+            print(start)
+            # 각 종목 주소뽑아오기
+            cod = upjong[i].find('a')['href']
+            cod='https://finance.naver.com'+cod
+            print(cod)
+            time.sleep(2)
+            webpage = urlopen(cod)
+            source = BeautifulSoup(webpage, 'html5lib')
+            try:
+                #기업실적분석 테이블에서 최근분기실적 ROE(%)값 뽑아오기
+                data=source.find_all('tr', attrs={'class': 'line_end'})
+                ROE = data[1]
+                ROE= ROE.find_all('td')
+                ROE=ROE[8].get_text().strip()
+                print(ROE)
+            except:
+                ROE='N/A'
+            try:
+                PBR=source.find_all('em', attrs={'id': '_pbr'})
+                PBR=PBR[0].get_text().strip()
+                print(PBR)
+            except:
+                PBR='N/A'
+            try:
+                PER=source.find_all('em', attrs={'id': '_per'})
+                PER=PER[0].get_text().strip()
+                print(PER)
+            except:
+                PER='N/A'
+            #dividend_rate
+            try:
+                DVR=source.find_all('em', attrs={'id': '_dvr'})
+                DVR=DVR[0].get_text().strip()
+                print(DVR)
+            except:
+                DVR='N/A'
+            try:
+                AVG=source.find_all('tr', attrs={'class': 'strong'})
+                AVG=AVG[2].find_all('td')
+                AVG=AVG[0].get_text().strip()
+                AVG = float(re.findall('\d+.\d+', AVG)[0])
+                print(AVG)
+            except:
+                AVG='N/A'
+
+            print(ROE, PER,PBR,DVR, AVG)
+
+
+            try:
+                data = {'업종명': [name],
+                    '소속종목수': [search],
+                    '소속종목명': [start],
+                    'ROE': [ROE],
+                    'PER':[PER],
+                    'PBR':[PBR],
+                    'DVR':[DVR],
+                    'PER_AVG':[AVG],
+                    'url':[cod]
+                    }
+                df = pd.DataFrame(data, columns=["업종명", "소속종목수", "소속종목명", "ROE","PER","PBR","PER_AVG","url"])
+                #기타 제외
+                regex1 = re.compile(r".*기타.*")
+                matchobj1 = regex1.finditer(str(name))
+                for r1 in matchobj1:
+                    match1 = r1.group(0)
+                    if (bool(match1) == True):
+                        df = pd.DataFrame(None)
+                #print(df)
+                # #데이터프레임 이어붙이기
+                all_data_frame.append(df)
+                df_concat = pd.concat(all_data_frame, axis=0, ignore_index=False)
+                print(df_concat)
+                # 엑셀파일로 저장하기
+                writer = pd.ExcelWriter('naver_finance_082.xlsx')
+                df_concat.to_excel(writer, sheet_name='Sheet1', index=False, header=True, na_rep=' ',
+                               encoding='utf-8')  # 엑셀로 저장
+                writer.save()
+            except:
+                pass
+                if int(i) > int(count+1):
+                    break
+
+
+
+        
