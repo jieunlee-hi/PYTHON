@@ -1,0 +1,211 @@
+#네이버금융 업종별 (ROE/PER/PBR) 데이터를 활용한 저평가종목 분석(2022.03 분기 기준)
+#PER 작은값 /PBR 작은값/ROE 높은값 일수록 저평가된종목일 확률이 높다.
+#66개종목 AVG=동일업종PER평균
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+
+df=pd.read_csv('/content/sample_data/naver_finance_0829end.csv',encoding='cp949')
+df.head(20)
+
+df['ROE'] = pd.to_numeric(df['ROE'],errors='coerce')
+
+df.info()
+
+df['PER'] = pd.to_numeric(df['PER'],errors='coerce')
+
+df.info()
+
+#이상치 존재 유무 시각화
+
+plt.figure(figsize=(12,8))
+
+sns.boxplot(data=df[['ROE','PER','PBR','DVR','PER_AVG']],color='red',notch=True)
+
+plt.show()
+
+#결측값 여부 확인
+df.isnull()
+#네이버금융사이트 내에 데이터값이 없는 경우 결측값 발생
+df.isnull().sum()
+
+#배당금 없는 컬럼의 결측치 0으로 대체
+df['DVR']=df['DVR'].fillna(0)
+
+#결측값 여부 확인
+df.isnull()
+#네이버금융사이트 내에 데이터값이 없는 경우 결측값 발생
+df.isnull().sum()
+
+#결측값이 들어있는 행 전체 삭제
+df=df.dropna(axis=0)
+
+#결측값 여부 확인
+df.isnull()
+#네이버금융사이트 내에 데이터값이 없는 경우 결측값 발생
+df.isnull().sum()
+
+#결측치 삭제 후 이상치 존재 유무 시각화
+plt.figure(figsize=(12,8))
+sns.boxplot(data=df[['ROE','PER','PBR','DVR','PER_AVG']],color='red',notch=True)
+plt.show()
+
+#이상치값 IQR 구하기
+Q1=df.quantile(0.25)
+Q3=df.quantile(0.75)
+IQR=Q3-Q1
+Q1 - 1.5 * IQR, Q3 + 1.5 * IQR
+
+# ROE_Q3 = df.quantile(0.75) # df['ROE'].quantile(0.75) 처럼 특정 열만 적용 가능
+# ROE_Q1 = df.quantile(0.25)
+
+# ROE_IQR = ROE_Q3 - ROE_Q1
+# 'ROE' 열에 대하여 이상치 여부를 판별해주는 함수
+def is_ROE_outlier(df):
+  roe_score = df['ROE']
+  if roe_score > Q3['ROE'] + 1.5 * IQR['ROE'] or roe_score < Q1['ROE'] - 1.5 * IQR['ROE']:
+      return True
+  else:
+      return False
+
+
+# apply 함수를 통하여 각 값의 이상치 여부를 찾고 새로운 열에 결과 저장
+df['ROE_IQR'] = df.apply(is_ROE_outlier, axis = 1) # axis = 1 지정 필수
+
+df
+
+# PER_Q3 = df.quantile(0.75) # df['ROE'].quantile(0.75) 처럼 특정 열만 적용 가능
+# PER_Q1 = df.quantile(0.25)
+
+# PER_IQR = PER_Q3 - PER_Q1
+
+# 'PER' 열에 대하여 이상치 여부를 판별해주는 함수
+def is_PER_outlier(df):
+  per_score = df['PER']
+  if per_score > Q3['PER'] + 1.5 * IQR['PER'] or per_score < Q1['PER'] - 1.5 * IQR['PER']:
+      return True
+  else:
+      return False
+
+df['PER_IQR'] = df.apply(is_PER_outlier, axis = 1) # axis = 1 지정 필수
+df
+
+# 'PBR' 열에 대하여 이상치 여부를 판별해주는 함수
+def is_PBR_outlier(df):
+  pbr_score = df['PBR']
+  if pbr_score > Q3['PBR'] + 1.5 * IQR['PBR'] or pbr_score < Q1['PBR'] - 1.5 * IQR['PBR']:
+      return True
+  else:
+      return False
+df['PBR_IQR'] = df.apply(is_PBR_outlier, axis = 1) # axis = 1 지정 필수
+df
+
+# 'AVG' 열에 대하여 이상치 여부를 판별해주는 함수
+def is_AVG_outlier(df):
+  avg_score = df['PER_AVG']
+  if avg_score > Q3['PER_AVG'] + 1.5 * IQR['PER_AVG'] or avg_score < Q1['PER_AVG'] - 1.5 * IQR['PER_AVG']:
+      return True
+  else:
+      return False
+
+df['AVG_IQR'] = df.apply(is_AVG_outlier, axis = 1) # axis = 1 지정 필수
+df
+
+# PER 값이 이상치인 행은 제거하여 필터링
+df = df.loc[df['PER_IQR'] == False]
+# 이상치여부를 나타내는 열 제거
+del df['PER_IQR']
+
+df
+
+# PBR값이 이상치인 행은 제거하여 필터링
+df = df.loc[df['PBR_IQR'] == False]
+# 이상치여부를 나타내는 열 제거
+del df['PBR_IQR']
+
+df
+
+#AVG값이 이상치인 행은 제거하여 필터링
+df = df.loc[df['AVG_IQR'] == False]
+# 이상치여부를 나타내는 열 제거
+del df['AVG_IQR']
+
+df
+
+#결측치/이상치를 모두 제거 한 후 시각화
+plt.figure(figsize=(12,8))
+sns.boxplot(data=df[['ROE','PER','PBR','DVR','PER_AVG']],color='red',notch=True)
+plt.show()
+
+df.describe()
+
+#데이터 값 분포 시각화
+import matplotlib.pyplot as plt
+
+fig = plt.figure(figsize=(15,10))
+
+for i, col in enumerate(df):
+    if 3 <= i <= 7:
+        ax = fig.add_subplot(4,2, i)
+        ax.title.set_text(col)
+
+        if col == "PER":
+            df[col].plot.hist(bins=[0,5,10,15,20,25,30,35,40,45,52],color='r',edgecolor = 'whitesmoke',linewidth = 1.4)
+        elif col == "PBR":
+            df[col].plot.hist(bins=[0.05,0.1,0.2,0.35,0.5,0.6,0.75,0.9,1,1.25,1.5,1.7,1.9,2.0,2.25,2.5,2.75,3,3.5,3.7],color='b',edgecolor = 'whitesmoke',linewidth = 1.4)
+        elif col == "ROE":
+            df[col].plot.hist(bins=[-3,0,1,2,3,5,7,8,9,10,13,15,17,20,22,25,27,30,33,35],color='g',edgecolor = 'whitesmoke',linewidth = 1.4)
+        elif col == "DVR":
+            df[col].plot.hist(bins=[0,1,2,3,5,9,12,15],color='c',edgecolor = 'whitesmoke',linewidth = 1.4)
+        elif col == "PER_AVG":
+            df[col].plot.hist(bins=[0,3,5,10,13,15,17,18,20,25,27,30,31,33,39,40],color='y',edgecolor = 'whitesmoke',linewidth = 1.4)
+
+plt.show()
+
+#PER 분석
+#PER은 현재주식가격을 주당순이익으로 나눈값
+#같은산업군에서 비교해야함. 동일업종PER평균값인 PER_AVG값과 비교
+df_PER=df[df['PER']<df['PER_AVG']]
+
+df_PER
+
+df_PER.info()
+
+
+df_PER['PER_rank']=df_PER['PER_AVG']-df_PER['PER']
+
+
+df_PER.head()
+
+#PER값이 동일업종평균보다 많이 높은순서로 정렬
+df_s = df_PER.sort_values(by=['PER_rank'], ascending=[False]) 
+df_s.head()
+
+df
+
+#ROE분석
+#ROE 10%정도 이상을 많이 추천하는데, ROE 10%이상만되어도 우수한기업 20-30%일경우 굉장한성장  *
+#ROE가높을수록 PBR도 높아진다
+df_ROE=df[df['ROE']>10]
+
+df_ROE
+
+#ROE많이 높은순서로 정렬
+df_ROE = df_ROE.sort_values(by=['ROE'], ascending=[False]) 
+df_ROE.head()
+
+#PBR분석
+##PER이 낮을수록 기업의 수익성이좋고, PBR이 낮을수록 기업의 재무건전성이 좋다고 생각된다.
+#통상적으로 PER은 10보다 낮을 때, PBR은 1보다 낮을때 저평가되어있다고 말한다. 
+df_PBR=df[df['PBR']<1]
+df_PBR
+
+
+df_sort=df_PER[df_PER['ROE']>10]
+
+df_sort=df_sort[df_sort['PBR']<1]
+
+df_sort =df_sort.sort_values(by=['PER_rank','PBR','ROE'], ascending=[False,False,True]) 
+df_sort
